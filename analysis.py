@@ -10,6 +10,10 @@ from scipy.stats import wilcoxon, rankdata
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import font_manager
+_available_fonts = {f.name for f in font_manager.fontManager.ttflist}
+plt.rcParams['font.family'] = [f for f in ['Microsoft JhengHei', 'Noto Sans CJK JP', 'Noto Sans CJK TC', 'DejaVu Sans'] if f in _available_fonts]
+plt.rcParams['axes.unicode_minus'] = False
 
 GROUPS = {1: 'SJS', 2: 'DES'}
 TREATMENTS = {1: 'GB20', 2: 'GB20+BL2', 3: 'WL'}
@@ -134,7 +138,7 @@ def analyze(data, before='V1', after='V4', clinical_family=False):
 def fmt(v, name):
     return f'{name} = N/A' if not np.isfinite(v) else f'{name} < 0.001' if v<.001 else f'{name} = {v:.3f}'
 
-def plot(wide, row, labels=('Baseline','8-Week'), ylabel='TBUT (sec)', color='#887575', complete_only=False, limits=None):
+def plot(wide, row, labels=('Baseline','8-Week'), ylabel='TBUT (sec)', color='#887575', complete_only=False, limits=None, title=None):
     wide = wide.dropna() if complete_only else wide
     fig, ax = plt.subplots(figsize=(6.5,5.5), dpi=140)
     values = [wide[c].dropna().to_numpy() for c in wide]
@@ -158,7 +162,7 @@ def plot(wide, row, labels=('Baseline','8-Week'), ylabel='TBUT (sec)', color='#8
         span = np.ptp(finite); pad = .1*span if span else 1
         ax.set_ylim(finite.min()-pad,finite.max()+pad)
     ax.set_xticks([1,2],labels); ax.set_xlabel('Visit',fontsize=15)
-    ax.set_ylabel(ylabel,fontsize=15); ax.set_title(str(row['treatment']),fontsize=16,pad=12)
+    ax.set_ylabel(ylabel,fontsize=15); ax.set_title(str(row['treatment']) if title is None else title,fontsize=16,pad=12)
     ax.tick_params(labelsize=12,width=2,length=8)
     for s in ax.spines.values(): s.set_linewidth(2)
     fig.tight_layout()
@@ -174,7 +178,7 @@ def bundle(summary, panels, config):
         z.writestr('settings.json',json.dumps({**config,'scipy_version':scipy.__version__,'test':'two-sided Wilcoxon, wilcox, auto','BH':'all valid tests in this uploaded metric; preview selection does not change family'},ensure_ascii=False,indent=2))
         for idx,row in summary.iterrows():
             if not len(panels[(row.group,row.treatment)]): continue
-            fig=plot(panels[(row.group,row.treatment)],row,**{k:config[k] for k in ['labels','ylabel','color','complete_only','limits'] if k in config})
+            fig=plot(panels[(row.group,row.treatment)],row,**{k:config[k] for k in ['labels','ylabel','color','complete_only','limits','title'] if k in config})
             name=re.sub(r'[^\w+.-]+','_',f'{idx+1}_{row.group}_{row.treatment}')
             for fmt_ in ['png','svg']:
                 z.writestr(f'{name}.{fmt_}',figure_bytes(fig,fmt_,config.get('dpi',300)))
