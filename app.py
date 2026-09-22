@@ -4,10 +4,22 @@ import streamlit as st
 import matplotlib.pyplot as plt
 from analysis import read_table, clinical, generic, analyze, plot, figure_bytes, bundle, demo, fmt
 
-st.set_page_config(page_title='Paired Studio | 配對分析', page_icon='◌', layout='wide')
+st.set_page_config(page_title='Paired analyze', page_icon='◌', layout='wide')
 st.markdown('''<style>
-.stApp {background:#F7F9FC;color:#172B3A}
-.block-container {max-width:1240px;padding-top:2.5rem}
+.stApp {background:#F5F7FA;color:#172B3A}
+.block-container {max-width:1380px;padding-top:2rem}
+h1 {font-size:2.2rem!important;margin-bottom:1rem!important}
+[data-testid="stVerticalBlockBorderWrapper"] {background:#FFFFFF;border-radius:16px}
+[data-testid="stExpander"] {background:#FFFFFF;border-color:#DEE5ED;border-radius:12px}
+[data-testid="stFileUploader"] {border-radius:12px}
+[data-testid="stSidebar"] h2 {font-size:1.15rem}
+[data-testid="stSidebar"] [role="radiogroup"] {gap:10px}
+[data-testid="stSidebar"] label {padding:6px 0}
+[data-testid="stTabs"] [role="tab"] {font-size:1rem;padding:12px 20px}
+[data-testid="stDownloadButton"] button {border-radius:8px}
+[data-testid="stMetricLabel"] {color:#526476}
+[data-testid="stCaptionContainer"] {color:#526476}
+
 h1 {letter-spacing:-.04em} h2 {letter-spacing:-.02em}
 [data-testid="stMetric"] {background:white;border:1px solid #DEE5ED;border-radius:12px;padding:16px}
 [data-testid="stMetricValue"] {font-size:1.5rem}
@@ -15,9 +27,21 @@ h1 {letter-spacing:-.04em} h2 {letter-spacing:-.02em}
 button {min-height:44px} button:focus-visible {outline:3px solid #087E8B!important}
 @media(prefers-reduced-motion:reduce) {* {animation:none!important;transition:none!important}}
 </style>''', unsafe_allow_html=True)
-st.caption('PAIRED STUDIO / RESEARCH WORKSPACE')
-st.title('每一條線，都是一次改變。')
-st.write('從前後測資料到可發表的配對圖。上傳、檢查、匯出，在同一個工作台完成。')
+st.title('Paired analyze')
+
+with st.expander('測試需要哪些資料檔案？'):
+    st.markdown('''選擇左側「原始 TBUT / Schirmer」，每次上傳 **一份檢測 Excel + 一份受試者分組 CSV**。
+
+| 分析 | 檢測檔案 | Excel 工作表 |
+| --- | --- | --- |
+| TBUT | ACUDES-TBUT 20240130.xlsx | ACUDES-TBUT |
+| Schirmer | ACUDES-Schirmer\'s test 20240130.xlsx | ACUDES-Schirmers test |
+
+兩種分析共用分組檔：`26_0305_CMC_patient_sheet.csv`，位於原專案的 `26_0305_CMC_patient_sheet` 子資料夾。
+
+檢測表必須有 `序號`、`Group` 與眼別量測欄位；分組表必須有 `ID`、`TX Group`。預設比較 V1 與 V4，使用雙眼平均，因此兩次訪視的 OS、OD 都需有值才能成為完整配對。
+
+不需要上傳 Python 程式、PNG 圖片、PKL 快取或菌相資料。若只想先體驗操作，直接使用「示範資料」。''')
 
 def upload_table(label,key):
     uploaded=st.file_uploader(label,type=['csv','xlsx'],key=key)
@@ -29,17 +53,17 @@ def upload_table(label,key):
     return read_table(uploaded,sheet)
 
 with st.sidebar:
-    st.header('分析工作台')
-    mode=st.radio('資料來源',['示範資料','原始 TBUT / Schirmer','一般前後測資料'])
+    st.header('資料來源')
+    mode=st.radio('選擇資料類型',['示範資料','原始 TBUT / Schirmer','一般前後測資料'],label_visibility='collapsed')
     st.divider()
-    st.caption('分析方法')
-    st.write('Wilcoxon · 雙尾配對檢定')
-    st.write('BH-FDR · 同指標跨組別校正')
-    st.caption('至少 4 組完整配對才進行檢定。零差值依 wilcox 排除；全部零差值則不估計 p 值。')
-    st.caption('上傳資料在伺服器記憶體處理；應用程式不寫入資料檔，也不使用共享資料快取。')
+    st.caption('檢定方式')
+    st.write('Wilcoxon · BH-FDR')
+    with st.expander('資料處理與檢定規則'):
+        st.caption('至少 4 組完整配對。雙尾 Wilcoxon 檢定；同一指標跨組別做 BH 校正。零差值依 wilcox 處理。')
+        st.caption('資料在伺服器記憶體處理，不寫入上傳檔或共享快取。')
 
 try:
-    with st.expander('01 / 資料與配對設定',expanded=mode!='示範資料'):
+    with st.expander('1  資料與配對',expanded=mode!='示範資料'):
         clinical_family=mode=='原始 TBUT / Schirmer'
         metric='TBUT'
         eye='mean'
@@ -49,11 +73,17 @@ try:
             data,audit=generic(raw,'ID','baseline','week8','group','treatment')
             st.download_button('下載示範 CSV / 資料格式範本',raw.to_csv(index=False).encode('utf-8-sig'),'paired_demo.csv','text/csv')
         elif clinical_family:
-            metric=st.selectbox('指標',['TBUT','Schirmer'])
-            eye=st.selectbox('眼別',['mean','OS','OD'],format_func=lambda x:{'mean':'雙眼平均（必須同時有 OS 與 OD）','OS':'OS 左眼','OD':'OD 右眼'}[x])
+            opt1,opt2=st.columns(2)
+            metric=opt1.selectbox('指標',['TBUT','Schirmer'])
+            eye=opt2.selectbox('眼別',['mean','OS','OD'],format_func=lambda x:{'mean':'雙眼平均（必須同時有 OS 與 OD）','OS':'OS 左眼','OD':'OD 右眼'}[x])
             st.caption('檢測表：序號、Group、TBUTV1-OS / TBUTV1-OD…；Schirmer 使用 V1-OS / V1-OD…。分組表：ID、TX Group。')
-            raw=upload_table('上傳檢測資料','measure')
-            patient=upload_table('上傳受試者分組表','patients')
+            up1,up2=st.columns(2)
+            with up1:
+                st.markdown('**檢測數值**')
+                raw=upload_table('檢測 Excel / CSV','measure')
+            with up2:
+                st.markdown('**受試者分組**')
+                patient=upload_table('分組 CSV / Excel','patients')
             if raw is None or patient is None:
                 st.info('請上傳兩份資料，或從左側選擇示範資料。'); st.stop()
             data,audit=clinical(raw,patient,metric,eye)
@@ -76,41 +106,42 @@ try:
             group=a.selectbox('疾病 / 分層欄位',[None]+cols,format_func=lambda x:x or '不分組')
             treatment=b.selectbox('治療組別欄位',[None]+cols,format_func=lambda x:x or '不分組')
             data,audit=generic(raw,subject,pre,post,group,treatment)
-        st.dataframe(raw.head(10),hide_index=True,width='stretch')
+        with st.expander('檢查前 10 筆資料'):
+            st.dataframe(raw.head(10),hide_index=True,width='stretch')
     summary,panels=analyze(data,before,after,clinical_family)
 except (ValueError,KeyError,TypeError,ImportError,OSError) as e:
     st.error(str(e)); st.stop()
 
-if mode=='示範資料': st.info('目前為合成示範資料，用於體驗介面；不是原研究結果。')
+if mode=='示範資料': st.caption('示範模式 · 合成資料，非研究結果。切換左側資料來源即可上傳自己的檔案。')
 if audit['invalid_measurement_cells']: st.warning(f"{audit['invalid_measurement_cells']} 個非空白量測無法轉為有限數值，已視為缺失。")
 if audit['unmatched_or_excluded_group']: st.warning(f"{audit['unmatched_or_excluded_group']} 位受試者未匹配分組或不屬於 SJS/DES × GB20/GB20+BL2/WL，已排除。")
 
-left,right=st.columns([1,2],gap='large')
+left,right=st.columns([1,2.4],gap='large')
 with left:
-    st.subheader('02 / 圖表設定')
+    st.subheader('2  圖表設定')
     idx=st.selectbox('預覽組別',list(summary.index),format_func=lambda i:f"{summary.loc[i,'group']} · {summary.loc[i,'treatment']}")
     row=summary.loc[idx]
     g=row['group']
     prefix='Sjögren' if g=='SJS' else 'Dry-eye' if g=='DES' else ''
     baseline_label=f'{prefix}-Baseline' if prefix and before=='V1' else before
     after_label=f'{prefix}-8Week' if prefix and after=='V4' else after
-    label1=st.text_input('前測顯示文字',baseline_label,key=f'label1_{g}_{before}')
-    label2=st.text_input('後測顯示文字',after_label,key=f'label2_{g}_{after}')
-    ylabel=st.text_input('Y 軸名稱與單位','TBUT (sec)' if metric=='TBUT' else 'Schirmer (mm/5 min)',key='ylabel_'+metric)
-    color=st.color_picker('散點與箱型圖顏色','#887575')
-    complete_only=st.checkbox('圖上僅顯示完整配對',value=False,help='預設與原程式相同：圖上保留單次量測；統計一律只使用完整配對。')
-    limits=None
-    if st.checkbox('自訂 Y 軸範圍'):
-        a,b=st.columns(2)
-        lo=a.number_input('最小值',value=0.0); hi=b.number_input('最大值',value=12.0)
-        if hi<=lo: st.error('最大值必須大於最小值。'); st.stop()
-        limits=(lo,hi)
-    dpi=st.select_slider('PNG 解析度 (DPI)',[150,300,600,1200],value=300)
-    st.caption('SVG 為向量圖，放大不失真。1200 DPI 需要較多記憶體與處理時間。')
-
+    with st.expander('標籤、配色與座標',expanded=False):
+        label1=st.text_input('前測顯示文字',baseline_label,key=f'label1_{g}_{before}')
+        label2=st.text_input('後測顯示文字',after_label,key=f'label2_{g}_{after}')
+        ylabel=st.text_input('Y 軸名稱與單位','TBUT (sec)' if metric=='TBUT' else 'Schirmer (mm/5 min)',key='ylabel_'+metric)
+        color=st.color_picker('散點與箱型圖顏色','#887575')
+        complete_only=st.checkbox('圖上僅顯示完整配對',value=False,help='預設與原程式相同：圖上保留單次量測；統計一律只使用完整配對。')
+        limits=None
+        if st.checkbox('自訂 Y 軸範圍'):
+            a,b=st.columns(2)
+            lo=a.number_input('最小值',value=0.0); hi=b.number_input('最大值',value=12.0)
+            if hi<=lo: st.error('最大值必須大於最小值。'); st.stop()
+            limits=(lo,hi)
+        dpi=st.select_slider('PNG 解析度 (DPI)',[150,300,600,1200],value=300)
+        st.caption('SVG 為向量圖，放大不失真。1200 DPI 需要較多記憶體與處理時間。')
 config=dict(labels=(label1,label2),ylabel=ylabel,color=color,complete_only=complete_only,limits=limits,dpi=dpi,before=before,after=after,eye=eye,source_mode=mode)
 with right:
-    st.subheader('03 / 配對圖預覽')
+    st.subheader('3  分析結果')
     a,b,c=st.columns(3)
     a.metric('完整配對',int(row.n_pairs)); b.metric('Median Δ',f'{row.median_delta:+.2f}' if pd.notna(row.median_delta) else 'N/A'); c.metric('BH 校正',fmt(row.q_bh,'q'))
     fig=plot(panels[(row.group,row.treatment)],row,labels=config['labels'],ylabel=ylabel,color=color,complete_only=complete_only,limits=limits)
@@ -118,13 +149,14 @@ with right:
     st.caption(f"{int(row.n_incomplete)} 位受試者缺少其中一次量測。n 為完整配對數；Median Δ = median(後測 − 前測)。BH 校正涵蓋本指標的 {int(row.bh_valid_tests)} 個有效檢定。")
     if row.status!='ok': st.warning({'insufficient_pairs':'完整配對少於 4 組，未計算檢定。','all_zero_differences':'所有配對差值為零，Wilcoxon p 值不適用。'}[row.status])
     a,b=st.columns(2)
-    a.download_button('下載 PNG',figure_bytes(fig,'png',dpi),'paired_plot.png','image/png',width='stretch')
+    a.download_button('下載圖表 PNG',figure_bytes(fig,'png',dpi),'paired_plot.png','image/png',width='stretch',type='primary')
     b.download_button('下載 SVG',figure_bytes(fig,'svg'),'paired_plot.svg','image/svg+xml',width='stretch')
     plt.close(fig)
 
 st.divider()
-st.subheader('04 / 完整統計與批次匯出')
-st.dataframe(summary,hide_index=True,width='stretch')
+st.subheader('統計與匯出')
+with st.expander('查看所有組別統計',expanded=False):
+    st.dataframe(summary,hide_index=True,width='stretch')
 st.download_button('下載統計 CSV',summary.to_csv(index=False).encode('utf-8-sig'),'statistics.csv','text/csv')
 st.caption('批次匯出會將目前圖軸文字、配色和顯示範圍套用到所有組別。')
 if st.button('建立所有組別圖表 ZIP',type='primary'):
